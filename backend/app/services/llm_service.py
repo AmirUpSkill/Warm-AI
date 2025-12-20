@@ -68,10 +68,11 @@ class GeminiService:
             # --- Finally let's handle Grounding/Citations ---
             if chunk.candidates:
                 citations = self._extract_citations(chunk.candidates[0])
-                yield ChatStreamResponse(
-                    type="citations",
-                    content=citations
-                )
+                if citations:
+                    yield ChatStreamResponse(
+                        type="citation",
+                        sources=citations
+                    )
             # --- Signal Completion --- 
             yield ChatStreamResponse(type="done")
         except Exception as e:
