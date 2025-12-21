@@ -9,7 +9,7 @@ class PersonCard(BaseModel):
     current_role: Optional[str] = None
     company: Optional[str] = None
     location: Optional[str] = None
-    linkedin_url: HttpUrl
+    linkedin_url: Optional[HttpUrl] = None 
     summary: Optional[str] = Field(None, description="A 1-2 sentence AI-generated summary")
     skills: List[str] = []
     image_url: Optional[str] = None

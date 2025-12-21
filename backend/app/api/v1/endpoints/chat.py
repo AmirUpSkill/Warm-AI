@@ -15,12 +15,15 @@ async def event_generator(service: GeminiService, request: ChatMessageRequest):
     """
     try:
         async for chunk in service.chat_stream(request.message, request.mode):
-            # Format as SSE event
+            # --- Format as SSE event --- 
             data = chunk.model_dump_json()
             yield f"data: {data}\n\n"
     except Exception as e:
         app_logger.error(f"Stream error: {str(e)}")
-        error_response = ChatStreamResponse(type="error", content=str(e))
+        error_response = ChatStreamResponse(
+            type="error",
+            content="Something went wrong while streaming results. Please try again."
+        )
         yield f"data: {error_response.model_dump_json()}\n\n"
 
 

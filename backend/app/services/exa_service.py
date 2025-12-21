@@ -3,6 +3,8 @@ import re
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 from exa_py import Exa
+from starlette.concurrency import run_in_threadpool  # Non-blocking for sync SDK
+
 from app.core.config import get_settings
 from app.core.logging import app_logger
 from app.schemas.search import PersonCard, CompanyCard, SearchResponse
@@ -35,7 +37,6 @@ class ExaService:
         app_logger.info("ExaService initialized")
     
     # --- Helper Methods ---
-    
     def _extract_skills_from_text(self, text: str) -> List[str]:
         """
         Extracts skills from the raw LinkedIn text.
@@ -45,14 +46,14 @@ class ExaService:
             return []
         
         skills = []
-        # Look for skills section in Exa's markdown format
+        # --- Look for skills section in Exa's markdown format ----
         skills_match = re.search(r'## Skills\n(.+?)(?:\n##|\Z)', text, re.DOTALL)
         if skills_match:
             skills_text = skills_match.group(1)
-            # Skills are usually bullet-separated or comma-separated
+            # --- Skills are usually bullet-separated or comma-separated ----
             raw_skills = re.split(r'[•,\n]', skills_text)
             skills = [s.strip() for s in raw_skills if s.strip() and len(s.strip()) < 50]
-            # Limit to top 10 skills
+            # --- Limit to top 10 skills ----
             skills = skills[:10]
         
         return skills
@@ -64,7 +65,7 @@ class ExaService:
         if not text:
             return None
         
-        # Exa formats location like: "City, Country (CC)"
+        # --- Exa formats location like: "City, Country (CC)" ----
         loc_match = re.search(r'^(.+?, .+?) \([A-Z]{2}\)', text, re.MULTILINE)
         if loc_match:
             return loc_match.group(1)
@@ -78,11 +79,11 @@ class ExaService:
         if not title:
             return None, None
         
-        # Remove the name part (before the pipe)
+        #  --- Remove the name part (before the pipe) ----
         if "|" in title:
             title = title.split("|", 1)[-1].strip()
         
-        # Look for "Role at Company" pattern
+        # --- Look for "Role at Company" pattern ----
         at_match = re.search(r'(.+?)\s+(?:at|@)\s+(.+?)(?:\s*\||$)', title, re.IGNORECASE)
         if at_match:
             return at_match.group(1).strip(), at_match.group(2).strip()
@@ -95,9 +96,10 @@ class ExaService:
     
     # --- Main Search Methods ---
     
-    def search_people(self, query: str, num_results: int = 5) -> ExaSearchResult:
+    async def search_people(self, query: str, num_results: int = 5) -> ExaSearchResult:
         """
-        Searches for professionals using Exa's 'people' category.
+        Async wrapper that runs the blocking Exa logic in a threadpool.
+        This prevents blocking the FastAPI event loop.
         
         Args:
             query: Natural language query (e.g., "AI Engineer in Berlin with 3 years exp")
@@ -105,6 +107,13 @@ class ExaService:
             
         Returns:
             ExaSearchResult with request_id and List[PersonCard]
+        """
+        return await run_in_threadpool(self._search_people_sync, query, num_results)
+    
+    def _search_people_sync(self, query: str, num_results: int) -> ExaSearchResult:
+        """
+        Synchronous implementation of people search.
+        Called via run_in_threadpool to avoid blocking.
         """
         app_logger.info(f"Exa People Search | Query: '{query}' | Limit: {num_results}")
         
@@ -165,9 +174,10 @@ class ExaService:
             app_logger.error(f"Exa People Search Failed: {str(e)}")
             return ExaSearchResult(request_id="error", results=[])
 
-    def search_companies(self, query: str, num_results: int = 5) -> ExaSearchResult:
+    async def search_companies(self, query: str, num_results: int = 5) -> ExaSearchResult:
         """
-        Searches for companies using Exa's Summary feature with JSON schema.
+        Async wrapper that runs the blocking Exa logic in a threadpool.
+        This prevents blocking the FastAPI event loop.
         
         Args:
             query: Natural language query (e.g., "Seed-stage AI startups in London")
@@ -175,6 +185,13 @@ class ExaService:
             
         Returns:
             ExaSearchResult with request_id and List[CompanyCard]
+        """
+        return await run_in_threadpool(self._search_companies_sync, query, num_results)
+    
+    def _search_companies_sync(self, query: str, num_results: int) -> ExaSearchResult:
+        """
+        Synchronous implementation of company search.
+        Called via run_in_threadpool to avoid blocking.
         """
         app_logger.info(f"Exa Company Search | Query: '{query}' | Limit: {num_results}")
 
