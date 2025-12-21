@@ -36,12 +36,13 @@ class GeminiService:
     async def chat_stream(
         self,
         message: str ,
-        mode: ChatMode = ChatMode.STANDARD
+        mode: ChatMode = ChatMode.STANDARD,
+        model: str = "gemini-flash-latest" 
     ) -> AsyncGenerator[ChatStreamResponse, None]:
         """
             Streams response from Gemini , handling both Standard and Web Search modes . 
         """
-        app_logger.info(f"Starting Chat Stream | Mode: {mode}")
+        app_logger.info(f"Starting Chat Stream | Mode: {mode} | Model: {model}")
         # --- Configure Tools (Grounding) --- 
         tools = []
         if mode == ChatMode.WEB_SEARCH:
@@ -53,21 +54,24 @@ class GeminiService:
         )
         # --- Let's Call Gemini --- 
         try:
-            response_stream = self.client.models.generate_content_stream(
-                model=self.model_flash,
+            # --- We Use Client.aio for better non-blocking streaming experience --- 
+            response_stream = await self.client.aio.models.generate_content_stream(
+                model=model, 
                 contents=message,
                 config=config
             )
-            # --- Stream the response --- 
-            for chunk in response_stream:
+            # --- Stream the response with async iteration --- 
+            last_chunk = None
+            async for chunk in response_stream:
+                last_chunk = chunk
                 if chunk.text:
                     yield ChatStreamResponse(
                         type="token",
                         content=chunk.text
                     )
             # --- Finally let's handle Grounding/Citations ---
-            if chunk.candidates:
-                citations = self._extract_citations(chunk.candidates[0])
+            if last_chunk is not None and last_chunk.candidates:
+                citations = self._extract_citations(last_chunk.candidates[0])
                 if citations:
                     yield ChatStreamResponse(
                         type="citation",
