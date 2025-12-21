@@ -26,7 +26,7 @@ async def search_people(
     """
     app_logger.info(f"People search | Query: '{request.query}' | Limit: {request.num_results}")
     
-    result = service.search_people(request.query, request.num_results)
+    result = await service.search_people(request.query, request.num_results)
     
     if result.request_id == "error":
         raise HTTPException(
@@ -60,7 +60,7 @@ async def search_companies(
     """
     app_logger.info(f"Company search | Query: '{request.query}' | Limit: {request.num_results}")
     
-    result = service.search_companies(request.query, request.num_results)
+    result = await service.search_companies(request.query, request.num_results)
     
     if result.request_id == "error":
         raise HTTPException(
