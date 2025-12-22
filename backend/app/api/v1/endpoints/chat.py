@@ -1,60 +1,83 @@
+import json
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from app.api.deps import get_gemini_service
+from app.api.deps import get_gemini_service, get_history_service
 from app.services.llm_service import GeminiService
-from app.schemas.chat import ChatMessageRequest, ChatStreamResponse
+from app.services.history_service import HistoryService
+from app.schemas.chat import ChatMessageRequest, ChatStreamResponse, SourceCitation
 from app.core.logging import app_logger
-import json
 
-router = APIRouter(prefix="/chat", tags=["Chat"])
+router = APIRouter(prefix="/chat", tags=["chat"])
 
-
-async def event_generator(service: GeminiService, request: ChatMessageRequest):
-    """
-        Async generator that yields SSE-formatted events from Gemini.
-    """
-    try:
-        async for chunk in service.chat_stream(request.message, request.mode):
-            # --- Format as SSE event --- 
-            data = chunk.model_dump_json()
-            yield f"data: {data}\n\n"
-    except Exception as e:
-        app_logger.error(f"Stream error: {str(e)}")
-        error_response = ChatStreamResponse(
-            type="error",
-            content="Something went wrong while streaming results. Please try again."
-        )
-        yield f"data: {error_response.model_dump_json()}\n\n"
-
-
-@router.post("/message")
-async def send_message(
-    request: ChatMessageRequest,
-    service: GeminiService = Depends(get_gemini_service)
+async def event_generator(
+    service: GeminiService, 
+    history_service: HistoryService,
+    request: ChatMessageRequest
 ):
     """
-    Send a message and receive a streaming response.
-    
-    Uses Server-Sent Events (SSE) to stream tokens back to the client.
-    
-    **Modes:**
-    - `standard`: Pure LLM response
-    - `web_search`: Gemini with Google Search grounding
-    
-    **Response Events:**
-    - `token`: A text chunk from the AI
-    - `citation`: Source URLs (web_search mode only)
-    - `done`: Stream completed
-    - `error`: An error occurred
+    Handles:
+    1. Session Creation/Retrieval
+    2. Message Persistence (User)
+    3. Streaming Response
+    4. Message Persistence (AI)
     """
-    app_logger.info(f"Chat request | Mode: {request.mode} | Message: {request.message[:50]}...")
     
+    # ---  Handle Session ID ---
+    session_id = request.conversation_id
+    if not session_id:
+        title = request.message[:30] + "..." if len(request.message) > 30 else request.message
+        new_session = await history_service.create_session(title=title, mode=request.mode)
+        session_id = new_session.id
+        id_event = {"type": "session_created", "session_id": session_id, "title": title}
+        yield f"data: {json.dumps(id_event)}\n\n"
+
+    # ---  Persist User Message ---
+    await history_service.add_message(
+        session_id=session_id,
+        role="user",
+        content=request.message
+    )
+
+    # --- Stream & Accumulate AI Response ----
+    full_response_text = ""
+    citations_data = []
+
+    try:
+        async for chunk in service.chat_stream(request.message, request.mode, request.model):
+            # Pass through to frontend
+            yield f"data: {chunk.model_dump_json()}\n\n"
+            
+            # Accumulate text for DB
+            if chunk.type == "token" and chunk.content:
+                full_response_text += chunk.content
+            
+            # Capture citations for DB
+            if chunk.type == "citation" and chunk.sources:
+                citations_data = chunk.sources
+
+        # 4. Persist AI Message (After stream completes)
+        # Convert citations to JSON string if they exist
+        sources_json = json.dumps([c.model_dump() for c in citations_data]) if citations_data else None
+        
+        await history_service.add_message(
+            session_id=session_id,
+            role="assistant",
+            content=full_response_text,
+            sources=sources_json
+        )
+
+    except Exception as e:
+        app_logger.error(f"Stream Error: {str(e)}")
+        error_resp = ChatStreamResponse(type="error", content="Error saving chat history.")
+        yield f"data: {error_resp.model_dump_json()}\n\n"
+
+@router.post("/message")
+async def chat_message(
+    request: ChatMessageRequest,
+    service: GeminiService = Depends(get_gemini_service),
+    history_service: HistoryService = Depends(get_history_service)
+):
     return StreamingResponse(
-        event_generator(service, request),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
+        event_generator(service, history_service, request),
+        media_type="text/event-stream"
     )
