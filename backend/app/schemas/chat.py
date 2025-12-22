@@ -3,7 +3,7 @@ from typing import List, Optional
 from app.schemas.common import ChatMode
 
 class ChatMessageRequest(BaseModel):
-    conversation_id: Optional[str] = None
+    conversation_id: Optional[int] = None
     message: str
     mode: ChatMode = ChatMode.STANDARD
     model: str = "gemini-flash-latest"

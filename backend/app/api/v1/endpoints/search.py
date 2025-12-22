@@ -1,77 +1,75 @@
-import uuid
+import json
 from fastapi import APIRouter, Depends, HTTPException
-from app.api.deps import get_exa_service
+from app.api.deps import get_exa_service, get_history_service
 from app.services.exa_service import ExaService
-from app.schemas.search import SearchRequest, SearchResponse, PersonCard, CompanyCard
+from app.services.history_service import HistoryService
+from app.schemas.search import SearchRequest, SearchResponse
+from app.schemas.common import ChatMode, CardType
 from app.core.logging import app_logger
-from typing import List
 
-router = APIRouter(prefix="/search", tags=["Search"])
-
+router = APIRouter(prefix="/search", tags=["search"])
 
 @router.post("/people", response_model=SearchResponse)
 async def search_people(
     request: SearchRequest,
-    service: ExaService = Depends(get_exa_service)
+    service: ExaService = Depends(get_exa_service),
+    history_service: HistoryService = Depends(get_history_service)
 ):
-    """
-    Search for professionals using natural language.
+    app_logger.info(f"People search: {request.query}")
     
-    **Example queries:**
-    - "AI Engineers in Berlin with 3+ years experience"
-    - "Senior Product Managers at FAANG companies"
-    - "Founders of fintech startups in London"
-    
-    Returns a list of PersonCard widgets with structured profile data.
-    """
-    app_logger.info(f"People search | Query: '{request.query}' | Limit: {request.num_results}")
-    
+    # ---  Execute Search --- 
     result = await service.search_people(request.query, request.num_results)
     
     if result.request_id == "error":
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "EXA_API_ERROR",
-                "message": "Failed to retrieve results from Exa AI. Please try again later."
-            }
-        )
+        raise HTTPException(status_code=503, detail="Exa API Error")
+
+    # --- Persist History ---
+    # ---  Create Session 
+    title = f"People: {request.query}"
+    # Reuse existing chat modes so we don't rely on enum extensions
+    session = await history_service.create_session(title=title, mode=ChatMode.WEB_SEARCH)
     
-    return SearchResponse(
-        request_id=result.request_id,
-        results=result.results
+    # Save Query
+    await history_service.add_message(session_id=session.id, role="user", content=request.query)
+    
+    # Save Results (Serialize Cards to JSON string)
+    # We use model_dump() to convert Pydantic models to dicts
+    results_json = json.dumps([r.model_dump(mode='json') for r in result.results])
+    
+    await history_service.add_message(
+        session_id=session.id, 
+        role="assistant", 
+        content=results_json # <--- Storing cards JSON in content column
     )
 
+    return SearchResponse(request_id=result.request_id, results=result.results)
 
 @router.post("/companies", response_model=SearchResponse)
 async def search_companies(
     request: SearchRequest,
-    service: ExaService = Depends(get_exa_service)
+    service: ExaService = Depends(get_exa_service),
+    history_service: HistoryService = Depends(get_history_service)
 ):
-    """
-    Search for companies using natural language.
+    app_logger.info(f"Company search: {request.query}")
     
-    **Example queries:**
-    - "Seed-stage AI startups in London founded in 2024"
-    - "Enterprise SaaS companies in the healthcare space"
-    - "YC-backed companies in the developer tools space"
-    
-    Returns a list of CompanyCard widgets with structured company data.
-    """
-    app_logger.info(f"Company search | Query: '{request.query}' | Limit: {request.num_results}")
-    
+    # 1. Execute Search
     result = await service.search_companies(request.query, request.num_results)
     
     if result.request_id == "error":
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "EXA_API_ERROR",
-                "message": "Failed to retrieve results from Exa AI. Please try again later."
-            }
-        )
+        raise HTTPException(status_code=503, detail="Exa API Error")
+
+    # 2. Persist History
+    title = f"Company: {request.query}"
+    session = await history_service.create_session(title=title, mode=ChatMode.WEB_SEARCH)
     
-    return SearchResponse(
-        request_id=result.request_id,
-        results=result.results
+    await history_service.add_message(session_id=session.id, role="user", content=request.query)
+    
+    results_json = json.dumps([r.model_dump(mode='json') for r in result.results])
+    
+    await history_service.add_message(
+        session_id=session.id, 
+        role="assistant", 
+        content=results_json
     )
+
+    return SearchResponse(request_id=result.request_id, results=result.results)

@@ -5,7 +5,7 @@ export type ChatMode = 'standard' | 'web_search';
 export type SearchType = 'people' | 'companies';
 
 export interface ChatMessageRequest {
-  conversation_id?: string;
+  conversation_id?: number;
   message: string;
   mode: ChatMode;
   model?: string;
@@ -43,10 +43,12 @@ export interface SearchResponse<T> {
 }
 
 export interface SSEEvent {
-  type: 'token' | 'citation' | 'done' | 'error';
+  type: 'token' | 'citation' | 'done' | 'error' | 'session_created';
   content?: string;
   sources?: { title: string; url: string }[];
   error?: string;
+  session_id?: number;
+  title?: string;
 }
 
 // Chat API with SSE streaming
@@ -146,3 +148,45 @@ export async function checkHealth(): Promise<boolean> {
     return false;
   }
 }
+
+// --- History API ---
+
+import { SessionSummary, SessionDetail, SessionUpdate } from '@/types/history';
+
+/**
+ * List past sessions.
+ */
+export const listSessions = async (skip = 0, limit = 20): Promise<SessionSummary[]> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/sessions?skip=${skip}&limit=${limit}`);
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch sessions');
+  }
+  return response.json();
+};
+
+export const getSession = async (sessionId: number): Promise<SessionDetail> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/sessions/${sessionId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch session');
+  }
+  return response.json();
+};
+
+export const renameSession = async (sessionId: number, title: string): Promise<SessionSummary> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/sessions/${sessionId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  if (!response.ok) throw new Error('Failed to rename session');
+  return response.json();
+};
+
+export const deleteSession = async (sessionId: number): Promise<{ status: string, id: number }> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Failed to delete session');
+  return response.json();
+};

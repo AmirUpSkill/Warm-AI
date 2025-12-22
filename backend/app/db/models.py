@@ -9,7 +9,7 @@ class Session(SQLModel , table=True):
     mode: ChatMode 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    messages: List["Message"] = Relationship(back_populates="session")
+    messages: List["Message"] = Relationship(back_populates="session", cascade_delete=True)
 class Message(SQLModel , table=True):
     id : Optional[int] = Field(default=None , primary_key=True)
     session_id: int = Field(foreign_key="session.id")

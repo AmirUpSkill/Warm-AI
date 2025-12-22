@@ -7,7 +7,7 @@ settings = get_settings()
 # --- Let's Create Async Engine --- 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    ehco=(settings.ENVIRONMENT == "development"),
+    echo=(settings.ENVIRONMENT == "development"),
     future=True
 )
 

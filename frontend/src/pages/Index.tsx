@@ -9,8 +9,10 @@ import { SkeletonCard } from '@/components/SkeletonCard';
 import { SuggestedQueries } from '@/components/SuggestedQueries';
 import { ModeSelector, type ModeOption } from '@/components/ModeSelector';
 import { WarmLogo } from '@/components/WarmLogo';
-import { Command } from 'lucide-react';
+import { Command, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useChatStore } from '@/store/use-chat-store';
+import { HistorySidebar } from '@/components/HistorySidebar';
 import {
   streamChat,
   searchPeople,
@@ -22,11 +24,22 @@ import {
 export default function Index() {
   const [mode, setMode] = useState<InputMode>('chat');
   const [chatMode, setChatMode] = useState<ChatMode>('standard');
-  const [isLoading, setIsLoading] = useState(false);
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
-  // Chat state
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Store integration
+  const {
+    currentSessionMessages: messages,
+    setMessages,
+    addMessage,
+    currentSessionId,
+    createNewSession,
+    setCurrentSessionId,
+    fetchSessions
+  } = useChatStore();
+
+  // Local loading state for UI feedback (store has its own isLoading for sessions)
+  const [isLoading, setIsLoading] = useState(false);
+
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Search state
@@ -45,8 +58,10 @@ export default function Index() {
     if (option.chatMode) {
       setChatMode(option.chatMode);
     }
+    // Clear all results when switching modes
     setPeopleResults([]);
     setCompanyResults([]);
+    setMessages([]); // Clear chat messages when switching modes
   };
 
   const handleChatSubmit = useCallback(
@@ -58,43 +73,56 @@ export default function Index() {
         role: 'user',
         content: input,
       };
-      setMessages((prev) => [...prev, userMessage]);
+
+      // Use store action
+      addMessage(userMessage);
       setIsLoading(true);
 
       const assistantId = generateId();
       let assistantContent = '';
       let assistantCitations: Citation[] = [];
 
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantId, role: 'assistant', content: '', isStreaming: true },
-      ]);
+      // Add placeholder
+      addMessage({ id: assistantId, role: 'assistant', content: '', isStreaming: true });
 
       abortControllerRef.current = new AbortController();
 
       try {
         await streamChat(
-          { message: input, mode: chatMode },
+          {
+            message: input,
+            mode: chatMode,
+            conversation_id: currentSessionId || undefined // Send ID if we have one
+          },
           (event) => {
-            if (event.type === 'token' && event.content) {
+            if (event.type === 'session_created' && event.session_id) {
+              // New session created by backend
+              setCurrentSessionId(event.session_id);
+              // Refresh sessions list to show the new session
+              fetchSessions();
+            } else if (event.type === 'token' && event.content) {
               assistantContent += event.content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId
-                    ? { ...m, content: assistantContent }
-                    : m
-                )
+              // Update last message
+              // We need to access current messages to map
+              // Use functional update pattern with useChatStore.setState or just get latest
+              const currentMessages = useChatStore.getState().currentSessionMessages;
+              const updated = currentMessages.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: assistantContent }
+                  : m
               );
+              setMessages(updated);
+
             } else if (event.type === 'citation' && event.sources) {
               assistantCitations = event.sources;
             } else if (event.type === 'done') {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId
-                    ? { ...m, isStreaming: false, citations: assistantCitations }
-                    : m
-                )
+              const currentMessages = useChatStore.getState().currentSessionMessages;
+              const updated = currentMessages.map((m) =>
+                m.id === assistantId
+                  ? { ...m, isStreaming: false, citations: assistantCitations }
+                  : m
               );
+              setMessages(updated);
               setIsLoading(false);
             } else if (event.type === 'error') {
               toast.error(event.error || 'Stream error');
@@ -107,13 +135,15 @@ export default function Index() {
         if ((error as Error).name !== 'AbortError') {
           console.error('Chat error:', error);
           toast.error('Failed to connect to Warm AI backend');
-          setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+          // Remove failed message? Or show error state?
+          const currentMessages = useChatStore.getState().currentSessionMessages;
+          setMessages(currentMessages.filter((m) => m.id !== assistantId));
         }
       } finally {
         setIsLoading(false);
       }
     },
-    [chatMode]
+    [chatMode, currentSessionId]
   );
 
   const handleSearchSubmit = useCallback(
@@ -121,14 +151,20 @@ export default function Index() {
       setIsLoading(true);
       try {
         if (mode === 'people') {
+          console.log('Searching for people:', query);
           const response = await searchPeople(query);
+          console.log('People results:', response);
           setPeopleResults(response.results);
         } else if (mode === 'companies') {
+          console.log('Searching for companies:', query);
           const response = await searchCompanies(query);
+          console.log('Company results:', response);
           setCompanyResults(response.results);
         }
+        toast.success('Search completed!');
       } catch (error) {
-        toast.error('Search failed. Check if the backend is running.');
+        console.error('Search error:', error);
+        toast.error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setIsLoading(false);
       }
@@ -166,33 +202,30 @@ export default function Index() {
         onSelect={handleModeSelect}
       />
 
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-6 pointer-events-none">
+      {/* Fixed Navigation Controls */}
+      <div className="fixed top-6 left-6 z-50 flex items-center gap-4">
+        <HistorySidebar>
+          <button className="p-2.5 rounded-xl bg-white/50 shadow-sm border border-black/[0.03] hover:shadow-md hover:bg-white transition-all duration-300 group ring-1 ring-black/[0.01] backdrop-blur-xl">
+            <Menu className="w-4.5 h-4.5 text-muted-foreground group-hover:text-foreground" />
+          </button>
+        </HistorySidebar>
+
         <button
           onClick={() => {
-            setMessages([]);
+            createNewSession();
             setPeopleResults([]);
             setCompanyResults([]);
+            toast.success('Started a fresh session');
           }}
-          className="flex items-center gap-2.5 pointer-events-auto hover:opacity-80 transition-opacity cursor-pointer group"
+          className="flex items-center gap-2.5 hover:opacity-80 transition-all duration-300 cursor-pointer group"
         >
-          <div className="p-1.5 rounded-xl bg-[#fcfaf7] shadow-sm border border-black/[0.03] group-hover:shadow-md transition-all duration-300">
-            <WarmLogo className="w-9 h-9 text-foreground" />
+          <WarmLogo className="w-10 h-10 text-foreground group-hover:scale-105 transition-all duration-300" />
+          <div className="flex flex-col items-start -space-y-1">
+            <span className="text-xl font-serif italic text-foreground tracking-tight">warm</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/40 pl-0.5">AI</span>
           </div>
-          <span className="text-xl font-medium tracking-tight font-serif italic">warm</span>
         </button>
-
-        <nav className="flex items-center gap-6 pointer-events-auto">
-          <button
-            onClick={() => setIsSelectorOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary/50 hover:bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground transition-all"
-          >
-            <Command className="w-3 h-3" />
-            <span className="opacity-60">Commands</span>
-            <kbd className="ml-1 px-1.5 py-0.5 rounded bg-white text-[10px] font-bold border border-black/[0.05] shadow-sm">K</kbd>
-          </button>
-        </nav>
-      </header>
+      </div>
 
       {/* Main content area */}
       <main className="flex-1 flex flex-col">
@@ -230,7 +263,7 @@ export default function Index() {
         {hasContent && (
           <>
             {/* Scrollable results area */}
-            <div className="flex-1 pt-24 px-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex-1 pt-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="w-full max-w-5xl mx-auto">
                 {/* Chat messages */}
                 {mode === 'chat' && (
