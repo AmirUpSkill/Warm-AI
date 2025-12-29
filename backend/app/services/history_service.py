@@ -76,6 +76,7 @@ class HistoryService:
             await self.db.commit()
             return True 
         return False
+
     async def update_session_title(self, session_id:int , new_title: str ) -> Optional[Session]:
         """
             Update a session title 
@@ -89,3 +90,25 @@ class HistoryService:
             await self.db.refresh(session)
             return session 
         return None
+
+    async def update_session_file_search(
+        self,
+        session_id: int,
+        store_name: str,
+        file_name: Optional[str] = None,
+    ) -> Optional[Session]:
+        """
+            Attach File Search metadata (store + file name) to an existing session.
+        """
+        session = await self.get_session(session_id)
+        if session is None:
+            return None
+
+        session.file_search_store_name = store_name
+        session.file_name = file_name
+        session.updated_at = datetime.utcnow()
+        self.db.add(session)
+
+        await self.db.commit()
+        await self.db.refresh(session)
+        return session

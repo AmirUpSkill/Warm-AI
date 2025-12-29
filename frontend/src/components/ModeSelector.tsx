@@ -4,6 +4,7 @@ import {
     Globe,
     Users,
     Building2,
+    FileText,
     Command as CommandIcon,
 } from "lucide-react";
 import {
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/command";
 import { type SearchType, type ChatMode } from "@/lib/api";
 
-export type AppMode = "chat" | "people" | "companies";
+export type AppMode = "chat" | "people" | "companies" | "file_search";
 
 export interface ModeOption {
     id: string;
@@ -44,6 +45,13 @@ const modes: ModeOption[] = [
         mode: "chat",
         chatMode: "web_search",
         description: "Search the web for up-to-date information",
+    },
+    {
+        id: "file-search",
+        label: "File Search",
+        icon: FileText,
+        mode: "file_search",
+        description: "Upload a document and chat with AI grounded in its content",
     },
     {
         id: "people",

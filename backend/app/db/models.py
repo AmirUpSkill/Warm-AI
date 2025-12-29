@@ -7,6 +7,9 @@ class Session(SQLModel , table=True):
     id : Optional[int] = Field(default=None , primary_key=True)
     title: str 
     mode: ChatMode 
+    # --- For File Search --- 
+    file_search_store_name: Optional[str] = None 
+    file_name: Optional[str] = None 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     messages: List["Message"] = Relationship(back_populates="session", cascade_delete=True)

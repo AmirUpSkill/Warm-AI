@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { PersonCard } from '@/components/PersonCard';
 import { CompanyCard } from '@/components/CompanyCard';
-import { type PersonCard as PersonCardType, type CompanyCard as CompanyCardType } from '@/lib/api';
+import { type PersonCard as PersonCardType, type CompanyCard as CompanyCardType, type FileSearchCitation } from '@/lib/api';
 
 export interface Citation {
   title: string;
@@ -17,6 +17,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   citations?: Citation[];
+  file_citations?: FileSearchCitation[];
   isStreaming?: boolean;
   cards?: (PersonCardType | CompanyCardType)[];
 }

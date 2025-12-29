@@ -17,6 +17,8 @@ class SessionSummary(BaseModel):
     id: int
     title: str
     mode: ChatMode
+    file_search_store_name: Optional[str] = None
+    file_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

@@ -3,6 +3,7 @@ from enum import Enum
 class ChatMode(str , Enum):
     STANDARD = "standard"
     WEB_SEARCH = "web_search"
+    FILE_SEARCH = "file_search"
 
 class SearchCategory(str , Enum):
     PEOPLE = "people"

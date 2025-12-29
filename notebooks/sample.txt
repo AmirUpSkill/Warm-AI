@@ -1,0 +1,18 @@
+Warm AI Internal Memo (Sample)
+
+Product: Warm AI
+Vision: Professional networking + research with grounded answers.
+
+Key modules:
+- Chat mode
+- People search
+- Company search
+- File Search (RAG) prototype
+
+Roadmap v2:
+- Add File Search so users can upload a document and chat grounded in it.
+- Extract citations for UI trust.
+
+Pricing note (example):
+- Indexing creates embeddings.
+- Queries retrieve relevant chunks as context.
