@@ -1,19 +1,25 @@
-import { Message } from '@/components/ChatMessage';
+import type { ChatMode } from '@/lib/api';
 
 export interface SessionSummary {
     id: number;
     title: string;
+    mode: ChatMode;
+    file_name?: string | null;
+    file_search_store_name?: string | null;
     created_at: string;
     updated_at: string;
-    message_count: number;
 }
 
-export interface SessionDetail {
+export interface BackendMessage {
     id: number;
-    title: string;
+    role: string;
+    content: string;
+    sources?: string; // JSON string from backend
     created_at: string;
-    updated_at: string;
-    messages: Message[];
+}
+
+export interface SessionDetail extends SessionSummary {
+    messages: BackendMessage[];
 }
 
 export interface SessionUpdate {

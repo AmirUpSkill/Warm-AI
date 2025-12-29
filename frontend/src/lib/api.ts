@@ -1,7 +1,7 @@
 // Warm AI API Configuration
 const API_BASE_URL = 'http://localhost:8000';
 
-export type ChatMode = 'standard' | 'web_search';
+export type ChatMode = 'standard' | 'web_search' | 'file_search';
 export type SearchType = 'people' | 'companies';
 
 export interface ChatMessageRequest {
@@ -9,6 +9,13 @@ export interface ChatMessageRequest {
   message: string;
   mode: ChatMode;
   model?: string;
+}
+
+export interface FileSearchCitation {
+  source_title: string;
+  text_segment: string;
+  start_index?: number;
+  end_index?: number;
 }
 
 export interface PersonCard {
@@ -43,9 +50,10 @@ export interface SearchResponse<T> {
 }
 
 export interface SSEEvent {
-  type: 'token' | 'citation' | 'done' | 'error' | 'session_created';
+  type: 'token' | 'citation' | 'done' | 'error' | 'session_created' | 'file_citation';
   content?: string;
   sources?: { title: string; url: string }[];
+  file_citations?: FileSearchCitation[];
   error?: string;
   session_id?: number;
   title?: string;
@@ -57,13 +65,20 @@ export async function streamChat(
   onEvent: (event: SSEEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/chat/message`, {
+  const url = request.mode === 'file_search'
+    ? `${API_BASE_URL}/api/v1/file-search/chat`
+    : `${API_BASE_URL}/api/v1/chat/message`;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify(request.mode === 'file_search'
+      ? { session_id: request.conversation_id, message: request.message, model: request.model }
+      : request
+    ),
     signal,
   });
 
@@ -82,25 +97,43 @@ export async function streamChat(
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
+    const lines = buffer.split('\n\n');
     buffer = lines.pop() || '';
 
     for (const line of lines) {
       if (line.startsWith('data: ')) {
         const data = line.slice(6).trim();
-        if (data === '[DONE]') {
-          onEvent({ type: 'done' });
-          continue;
-        }
         try {
           const event = JSON.parse(data) as SSEEvent;
           onEvent(event);
         } catch {
-          // Ignore parse errors for incomplete chunks
+          // Ignore parse errors
         }
       }
     }
   }
+}
+
+// File Search Upload API
+export async function uploadFileForSearch(file: File): Promise<{
+  session_id: number;
+  store_name: string;
+  file_name: string;
+}> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/file-search/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
+    throw new Error(errorData.detail || `Upload failed with status: ${response.status}`);
+  }
+
+  return response.json();
 }
 
 // People Search API
@@ -150,26 +183,17 @@ export async function checkHealth(): Promise<boolean> {
 }
 
 // --- History API ---
+import { SessionSummary, SessionDetail } from '@/types/history';
 
-import { SessionSummary, SessionDetail, SessionUpdate } from '@/types/history';
-
-/**
- * List past sessions.
- */
 export const listSessions = async (skip = 0, limit = 20): Promise<SessionSummary[]> => {
   const response = await fetch(`${API_BASE_URL}/api/v1/sessions?skip=${skip}&limit=${limit}`);
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch sessions');
-  }
+  if (!response.ok) throw new Error('Failed to fetch sessions');
   return response.json();
 };
 
 export const getSession = async (sessionId: number): Promise<SessionDetail> => {
   const response = await fetch(`${API_BASE_URL}/api/v1/sessions/${sessionId}`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch session');
-  }
+  if (!response.ok) throw new Error('Failed to fetch session');
   return response.json();
 };
 

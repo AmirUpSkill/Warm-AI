@@ -7,8 +7,10 @@ interface ChatState {
     sessions: SessionSummary[];
     currentSessionId: number | null;
     currentSessionMessages: Message[];
+    currentSessionMeta: SessionSummary | null;
     isLoading: boolean;
     error: string | null;
+    isSidebarOpen: boolean;
 
     // Actions
     fetchSessions: () => Promise<void>;
@@ -22,14 +24,19 @@ interface ChatState {
     setMessages: (messages: Message[]) => void;
     addMessage: (message: Message) => void;
     setCurrentSessionId: (id: number | null) => void;
+    toggleSidebar: () => void;
+    setSidebarOpen: (open: boolean) => void;
+    setCurrentSessionMeta: (session: SessionSummary | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
     sessions: [],
     currentSessionId: null,
     currentSessionMessages: [],
+    currentSessionMeta: null,
     isLoading: false,
     error: null,
+    isSidebarOpen: true,
 
     fetchSessions: async () => {
         set({ isLoading: true, error: null });
@@ -48,7 +55,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ isLoading: true, error: null, currentSessionId: sessionId });
         try {
             const session = await getSession(sessionId);
-            
+
             // Transform backend messages to frontend Message format
             const messages: Message[] = session.messages.map((msg) => {
                 let citations;
@@ -74,7 +81,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 } catch (e) {
                     // Ignore parse errors – content stays as-is for normal chat history
                 }
-                
+
                 return {
                     id: msg.id.toString(),
                     role: msg.role as 'user' | 'assistant',
@@ -83,9 +90,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     cards,
                 };
             });
-            
+
             set({
                 currentSessionMessages: messages,
+                currentSessionMeta: session,
                 isLoading: false
             });
         } catch (error) {
@@ -95,7 +103,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
 
     clearCurrentSession: () => {
-        set({ currentSessionId: null, currentSessionMessages: [] });
+        set({ currentSessionId: null, currentSessionMessages: [], currentSessionMeta: null });
     },
 
     createNewSession: () => {
@@ -130,4 +138,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setMessages: (messages) => set({ currentSessionMessages: messages }),
     addMessage: (message) => set((state) => ({ currentSessionMessages: [...state.currentSessionMessages, message] })),
     setCurrentSessionId: (id) => set({ currentSessionId: id }),
+    toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
+    setSidebarOpen: (open) => set({ isSidebarOpen: open }),
+    setCurrentSessionMeta: (session) => set({ currentSessionMeta: session }),
 }));

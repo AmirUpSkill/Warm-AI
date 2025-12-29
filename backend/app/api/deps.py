@@ -8,6 +8,7 @@ from app.services.exa_service import ExaService
 from app.services.history_service import HistoryService
 from app.services.llm_service import GeminiService
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.services.file_search_service import FileSearchService
 
 
 # --- Cached Service Instances ---
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # (model loading, auth handshakes, etc.) happens only once per process.
 _gemini_service: GeminiService | None = None
 _exa_service: ExaService | None = None
+_file_search_service = None
 
 
 def get_gemini_service() -> GeminiService:
@@ -46,3 +48,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # --- History Service Dependency ---
 def get_history_service(db: AsyncSession = Depends(get_db)) -> HistoryService:
     return HistoryService(db)
+# --- File Search Service Dependency ---
+def get_file_search_service() -> FileSearchService:
+    global _file_search_service
+    if _file_search_service is None:
+        _file_search_service = FileSearchService()
+    return _file_search_service
