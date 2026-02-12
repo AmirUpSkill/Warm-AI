@@ -9,6 +9,7 @@ from app.services.history_service import HistoryService
 from app.services.llm_service import GeminiService
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.file_search_service import FileSearchService
+from app.services.agent_service import AgentService
 
 
 # --- Cached Service Instances ---
@@ -48,9 +49,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # --- History Service Dependency ---
 def get_history_service(db: AsyncSession = Depends(get_db)) -> HistoryService:
     return HistoryService(db)
+
+
 # --- File Search Service Dependency ---
 def get_file_search_service() -> FileSearchService:
     global _file_search_service
     if _file_search_service is None:
         _file_search_service = FileSearchService()
     return _file_search_service
+
+
+# --- Agent Service Dependency ---
+def get_agent_service(db: AsyncSession = Depends(get_db)) -> AgentService:
+    return AgentService(db)

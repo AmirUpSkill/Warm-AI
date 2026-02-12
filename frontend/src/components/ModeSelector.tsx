@@ -8,13 +8,14 @@ import {
     Command as CommandIcon,
 } from "lucide-react";
 import {
-    CommandDialog,
+    Command,
     CommandEmpty,
     CommandGroup,
     CommandInput,
     CommandItem,
     CommandList,
     CommandSeparator,
+    CommandDialog,
 } from "@/components/ui/command";
 import { type SearchType, type ChatMode } from "@/lib/api";
 
@@ -89,42 +90,54 @@ export function ModeSelector({ open, onOpenChange, onSelect }: ModeSelectorProps
 
     return (
         <CommandDialog open={open} onOpenChange={onOpenChange}>
-            <CommandInput placeholder="Search modes or commands..." />
-            <CommandList>
+            <ModeSelectorContent onSelect={(option) => {
+                onSelect(option);
+                onOpenChange(false);
+            }} />
+        </CommandDialog>
+    );
+}
+
+interface ModeSelectorContentProps {
+    onSelect: (option: ModeOption) => void;
+}
+
+export function ModeSelectorContent({ onSelect }: ModeSelectorContentProps) {
+    return (
+        <Command className="bg-[#fdfcfb]">
+            <CommandInput placeholder="Search modes or commands..." className="h-11 border-none focus:ring-0" />
+            <CommandList className="max-h-[300px] p-2">
                 <CommandEmpty>No results found.</CommandEmpty>
-                <CommandGroup heading="Modes">
+                <CommandGroup heading="Modes" className="px-2">
                     {modes.map((option) => (
                         <CommandItem
                             key={option.id}
-                            onSelect={() => {
-                                onSelect(option);
-                                onOpenChange(false);
-                            }}
-                            className="flex items-center gap-3 py-4 cursor-pointer data-[selected='true']:bg-accent transition-colors duration-200"
+                            onSelect={() => onSelect(option)}
+                            className="flex items-center gap-3 py-4 px-3 cursor-pointer data-[selected='true']:bg-black/5 transition-colors duration-200 rounded-xl"
                         >
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-background shadow-sm border border-black/[0.03] text-foreground/70 group-data-[selected='true']:text-foreground">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fdfcfb] shadow-sm border border-black/[0.03] text-foreground/70 group-data-[selected='true']:text-foreground shrink-0">
                                 <option.icon className="h-5 w-5" />
                             </div>
-                            <div className="flex flex-col">
-                                <span className="font-medium text-foreground">{option.label}</span>
-                                <span className="text-xs text-muted-foreground">
+                            <div className="flex flex-col min-w-0 flex-1">
+                                <span className="font-semibold text-sm text-foreground">{option.label}</span>
+                                <span className="text-[10px] text-muted-foreground truncate">
                                     {option.description}
                                 </span>
                             </div>
-                            <div className="ml-auto text-[10px] font-bold tracking-widest text-muted-foreground/30 opacity-0 group-data-[selected='true']:opacity-100 uppercase">
+                            <div className="ml-auto text-[10px] font-bold tracking-widest text-primary/40 opacity-0 group-data-[selected='true']:opacity-100 uppercase translate-x-2 group-data-[selected='true']:translate-x-0 transition-all">
                                 Select
                             </div>
                         </CommandItem>
                     ))}
                 </CommandGroup>
-                <CommandSeparator />
-                <CommandGroup heading="Quick Actions">
-                    <CommandItem className="py-3">
-                        <CommandIcon className="mr-2 h-4 w-4" />
-                        <span>Open Help</span>
+                <CommandSeparator className="my-2" />
+                <CommandGroup heading="Quick Actions" className="px-2">
+                    <CommandItem className="py-3 px-3 rounded-xl cursor-pointer data-[selected='true']:bg-black/5">
+                        <CommandIcon className="mr-3 h-4 w-4 opacity-50" />
+                        <span className="text-sm font-medium">Open Help</span>
                     </CommandItem>
                 </CommandGroup>
             </CommandList>
-        </CommandDialog>
+        </Command>
     );
 }

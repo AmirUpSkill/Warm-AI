@@ -20,6 +20,7 @@ export interface Message {
   file_citations?: FileSearchCitation[];
   isStreaming?: boolean;
   cards?: (PersonCardType | CompanyCardType)[];
+  avatar_url?: string;
 }
 
 interface ChatMessageProps {

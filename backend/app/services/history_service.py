@@ -9,13 +9,15 @@ from app.schemas.common import ChatMode
 class HistoryService:
     def __init__(self, db: AsyncSession):
         self.db = db 
-    async def create_session(self , title: str , mode: ChatMode) -> Session:
+    async def create_session(self, title: str, mode: ChatMode, agent_id: Optional[int] = None) -> Session:
         """
-            Create a new chat/search session . 
+        Create a new chat/search session.
+        Optionally link to an agent.
         """
         session = Session(
             title=title,
             mode=mode,
+            agent_id=agent_id,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )

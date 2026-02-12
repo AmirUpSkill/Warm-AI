@@ -214,3 +214,142 @@ export const deleteSession = async (sessionId: number): Promise<{ status: string
   if (!response.ok) throw new Error('Failed to delete session');
   return response.json();
 };
+// --- Agent API ---
+import {
+  Agent,
+  AgentCreate,
+  AgentUpdate,
+  AgentChatRequest,
+  TonePreset,
+  AgentContext
+} from '@/types/agent';
+
+export async function listAgents(mine = false, browse = false): Promise<Agent[]> {
+  const params = new URLSearchParams();
+  if (mine) params.append('mine', 'true');
+  if (browse) params.append('browse', 'true');
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents?${params.toString()}`);
+  if (!response.ok) throw new Error('Failed to fetch agents');
+  return response.json();
+}
+
+export async function getAgent(agentId: number): Promise<Agent> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}`);
+  if (!response.ok) throw new Error('Failed to fetch agent');
+  return response.json();
+}
+
+export async function createAgent(data: AgentCreate): Promise<Agent> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error('Failed to create agent');
+  return response.json();
+}
+
+export async function updateAgent(agentId: number, data: AgentUpdate): Promise<Agent> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error('Failed to update agent');
+  return response.json();
+}
+
+export async function deleteAgent(agentId: number): Promise<{ status: string; id: number }> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Failed to delete agent');
+  return response.json();
+}
+
+export async function uploadAgentAvatar(agentId: number, file: File): Promise<{ avatar_url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}/avatar`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) throw new Error('Failed to upload avatar');
+  return response.json();
+}
+
+export async function uploadAgentContext(agentId: number, file: File): Promise<AgentContext> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}/context`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) throw new Error('Failed to upload context file');
+  return response.json();
+}
+
+export async function deleteAgentContext(agentId: number, contextId: number): Promise<{ status: string; id: number }> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}/context/${contextId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Failed to delete context file');
+  return response.json();
+}
+
+export async function getTonePresets(): Promise<TonePreset[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/tones/presets`);
+  if (!response.ok) throw new Error('Failed to fetch tone presets');
+  return response.json();
+}
+
+export async function streamAgentChat(
+  agentId: number,
+  request: AgentChatRequest,
+  onEvent: (event: SSEEvent) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/agents/${agentId}/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    },
+    body: JSON.stringify(request),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Agent Chat API error: ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6).trim();
+        try {
+          const event = JSON.parse(data) as SSEEvent;
+          onEvent(event);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+  }
+}

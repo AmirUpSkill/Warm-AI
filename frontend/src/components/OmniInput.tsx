@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { MessageSquare, Users, Building2, ArrowUp, Square, Sparkles, Globe, ChevronDown, FileText } from 'lucide-react';
+import { MessageSquare, Users, Building2, ArrowUp, Square, LayoutGrid, Globe, ChevronDown, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Agent } from '@/types/agent';
 
 export type InputMode = 'chat' | 'people' | 'companies' | 'file_search';
 export type ChatMode = 'standard' | 'web_search' | 'file_search';
@@ -8,7 +9,9 @@ export type ChatMode = 'standard' | 'web_search' | 'file_search';
 interface OmniInputProps {
   mode: InputMode;
   chatMode: ChatMode;
-  onOpenSelector: () => void;
+  selectedAgent: Agent | null;
+  onOpenModeSelector: () => void;
+  onOpenAgentSelector: () => void;
   onSubmit: (value: string) => void;
   isLoading?: boolean;
   onStop?: () => void;
@@ -38,7 +41,9 @@ const chatModeIcons = {
 export function OmniInput({
   mode,
   chatMode,
-  onOpenSelector,
+  selectedAgent,
+  onOpenModeSelector,
+  onOpenAgentSelector,
   onSubmit,
   isLoading = false,
   onStop,
@@ -110,16 +115,41 @@ export function OmniInput({
 
           {/* Bottom bar */}
           <div className="flex items-center justify-between px-2 pb-1 pt-1">
-            <button
-              onClick={onOpenSelector}
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-secondary/80 hover:bg-secondary text-sm font-medium transition-all group"
-            >
-              <div className="flex items-center justify-center p-1 rounded-lg bg-[#fcfaf7] shadow-sm ring-1 ring-black/[0.05]">
-                {currentModeIcon}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  onClick={onOpenModeSelector}
+                  className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-secondary/80 hover:bg-secondary text-sm font-medium transition-all group"
+                >
+                  <div className="flex items-center justify-center p-1 rounded-lg bg-[#fcfaf7] shadow-sm ring-1 ring-black/[0.05]">
+                    {currentModeIcon}
+                  </div>
+                  <span className="text-foreground/80 group-hover:text-foreground">{currentModeLabel}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                </button>
               </div>
-              <span className="text-foreground/80 group-hover:text-foreground">{currentModeLabel}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-            </button>
+
+              {/* Agent Selector */}
+              <div className="relative">
+                <button
+                  onClick={onOpenAgentSelector}
+                  className={cn(
+                    "flex items-center gap-2 p-3 rounded-2xl transition-all group",
+                    selectedAgent
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "bg-secondary/80 hover:bg-secondary text-muted-foreground"
+                  )}
+                >
+                  {selectedAgent?.avatar_url ? (
+                    <img src={selectedAgent.avatar_url} className="h-4 w-4 rounded-full object-cover" />
+                  ) : (
+                    <LayoutGrid className={cn("h-4 w-4", selectedAgent ? "text-primary" : "text-muted-foreground/60 group-hover:text-foreground")} />
+                  )}
+                  {selectedAgent && <span className="text-xs font-semibold">{selectedAgent.name}</span>}
+                  {!selectedAgent && <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors ml-0.5" />}
+                </button>
+              </div>
+            </div>
 
             <button
               onClick={isLoading ? onStop : handleSubmit}

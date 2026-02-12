@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { format } from 'date-fns';
-import { MessageSquare, Trash2, PanelLeft, LogOut, SquarePen } from 'lucide-react';
+import { MessageSquare, Trash2, PanelLeft, LogOut, SquarePen, LayoutGrid } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '@/store/use-chat-store';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 export function Sidebar() {
+    const navigate = useNavigate();
     const {
         sessions,
         fetchSessions,
@@ -59,6 +61,18 @@ export function Sidebar() {
                 <div className="flex items-center gap-2 ml-1">
                     <span className="text-sm font-serif italic text-foreground tracking-tight">warm ai</span>
                 </div>
+            </div>
+
+            {/* Navigation Section */}
+            <div className="px-3 pt-4 pb-2 space-y-1">
+                <Button
+                    variant="ghost"
+                    onClick={() => navigate('/agents')}
+                    className="w-full justify-start gap-3 h-10 px-3 font-medium hover:bg-black/5 rounded-xl border border-transparent hover:border-black/5 transition-all text-sm group"
+                >
+                    <LayoutGrid className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <span>Agent</span>
+                </Button>
             </div>
 
             {/* New Chat Button */}

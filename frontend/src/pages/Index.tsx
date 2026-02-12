@@ -6,7 +6,8 @@ import { CompanyCard } from '@/components/CompanyCard';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { SuggestedQueries } from '@/components/SuggestedQueries';
 import { ModeSelector, type ModeOption } from '@/components/ModeSelector';
-import { Command, Menu, FileText, X, Flame } from 'lucide-react';
+import { AgentSelector } from '@/components/AgentSelector';
+import { Command, Menu, FileText, X, Flame, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/store/use-chat-store';
 import { Sidebar } from '@/components/Sidebar';
@@ -14,8 +15,10 @@ import { AppHeader } from '@/components/AppHeader';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { FileSearchMessage } from '@/components/FileSearchMessage';
 import { FileCitationPreview } from '@/components/FileCitationPreview';
+import { Agent } from '@/types/agent';
 import {
   streamChat,
+  streamAgentChat,
   searchPeople,
   searchCompanies,
   uploadFileForSearch,
@@ -28,6 +31,8 @@ export default function Index() {
   const [mode, setMode] = useState<InputMode>('chat');
   const [chatMode, setChatMode] = useState<ChatMode>('standard');
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+  const [isAgentSelectorOpen, setIsAgentSelectorOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
 
   // File Search State
   const [isUploading, setIsUploading] = useState(false);
@@ -82,6 +87,7 @@ export default function Index() {
     setUploadedFile(null);
     setUploadError(null);
     setCurrentSessionMeta(null);
+    setSelectedAgent(null);
   };
 
   const handleFileUpload = async (file: File) => {
@@ -135,49 +141,71 @@ export default function Index() {
       let assistantContent = '';
       let fileCitations: FileSearchCitation[] = [];
 
-      addMessage({ id: assistantId, role: 'assistant', content: '', isStreaming: true });
+      addMessage({
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        isStreaming: true,
+        avatar_url: selectedAgent?.avatar_url
+      });
 
       abortControllerRef.current = new AbortController();
 
       try {
-        await streamChat(
-          {
-            message: input,
-            mode: chatMode,
-            conversation_id: currentSessionId || undefined
-          },
-          (event) => {
-            if (event.type === 'session_created' && event.session_id) {
-              setCurrentSessionId(event.session_id);
-              fetchSessions();
-            } else if (event.type === 'token' && event.content) {
-              assistantContent += event.content;
-              const updated = useChatStore.getState().currentSessionMessages.map((m) =>
-                m.id === assistantId ? { ...m, content: assistantContent } : m
-              );
-              setMessages(updated);
-            } else if (event.type === 'file_citation' && event.content) {
-              try {
-                fileCitations = JSON.parse(event.content);
-              } catch (e) {
-                console.error('Failed to parse file citations:', e);
-              }
-            } else if (event.type === 'done') {
-              const updated = useChatStore.getState().currentSessionMessages.map((m) =>
-                m.id === assistantId ? {
-                  ...m,
-                  isStreaming: false,
-                  file_citations: fileCitations
-                } : m
-              );
-              setMessages(updated);
-              setIsLoading(false);
-            } else if (event.type === 'error') {
-              setIsLoading(false);
+        const onEvent = (event: any) => {
+          if (event.type === 'session_created' && event.session_id) {
+            setCurrentSessionId(event.session_id);
+            fetchSessions();
+          } else if (event.type === 'token' && event.content) {
+            assistantContent += event.content;
+            const updated = useChatStore.getState().currentSessionMessages.map((m) =>
+              m.id === assistantId ? { ...m, content: assistantContent } : m
+            );
+            setMessages(updated);
+          } else if (event.type === 'file_citation' && event.content) {
+            try {
+              fileCitations = JSON.parse(event.content);
+            } catch (e) {
+              console.error('Failed to parse file citations:', e);
             }
-          },
-          abortControllerRef.current.signal
-        );
+          } else if (event.type === 'done') {
+            const updated = useChatStore.getState().currentSessionMessages.map((m) =>
+              m.id === assistantId ? {
+                ...m,
+                isStreaming: false,
+                file_citations: fileCitations
+              } : m
+            );
+            setMessages(updated);
+            setIsLoading(false);
+          } else if (event.type === 'error') {
+            setIsLoading(false);
+          }
+        };
+
+        if (selectedAgent) {
+          await streamAgentChat(
+            selectedAgent.id,
+            {
+              agent_id: selectedAgent.id,
+              message: input,
+              session_id: currentSessionId || undefined,
+              ephemeral: false
+            },
+            onEvent,
+            abortControllerRef.current.signal
+          );
+        } else {
+          await streamChat(
+            {
+              message: input,
+              mode: chatMode,
+              conversation_id: currentSessionId || undefined
+            },
+            onEvent,
+            abortControllerRef.current.signal
+          );
+        }
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
           console.error('Chat error:', error);
@@ -188,7 +216,7 @@ export default function Index() {
         setIsLoading(false);
       }
     },
-    [chatMode, currentSessionId, addMessage, setCurrentSessionId, fetchSessions, setMessages]
+    [chatMode, currentSessionId, addMessage, setCurrentSessionId, fetchSessions, setMessages, selectedAgent]
   );
 
   const handleSearchSubmit = useCallback(
@@ -230,7 +258,7 @@ export default function Index() {
         sessionId: currentSessionMeta.id,
         fileName: currentSessionMeta.file_name || 'Uploaded Document'
       });
-    } else if (mode === 'file_search' && currentSessionMeta.mode !== 'file_search') {
+    } else if (mode === 'file_search' && (currentSessionMeta.mode as any) !== 'file_search') {
       setMode('chat');
       setChatMode('standard');
       setUploadedFile(null);
@@ -256,7 +284,7 @@ export default function Index() {
 
       <div className={cn(
         "flex-1 flex flex-col min-h-screen transition-all duration-300 relative",
-        isSidebarOpen ? "ml-0" : "ml-0" // Sidebar is fixed/absolute on mobile, but here we can just use flex
+        isSidebarOpen ? "ml-0" : "ml-0"
       )}>
         <AppHeader />
 
@@ -271,8 +299,6 @@ export default function Index() {
           onClose={() => setIsCitationPreviewOpen(false)}
           citation={selectedCitation}
         />
-
-        {/* Old header removed */}
 
         <main className="flex-1 flex flex-col">
           {!hasContent && (
@@ -302,15 +328,19 @@ export default function Index() {
                   <OmniInput
                     mode={mode}
                     chatMode={chatMode}
-                    onOpenSelector={() => setIsSelectorOpen(true)}
+                    selectedAgent={selectedAgent}
+                    onOpenModeSelector={() => setIsSelectorOpen(true)}
+                    onOpenAgentSelector={() => setIsAgentSelectorOpen(true)}
                     onSubmit={handleSubmit}
                     isLoading={isLoading}
                     onStop={handleStop}
                     isFileInputDisabled={mode === 'file_search' && !uploadedFile}
                   />
-                  <div className="mt-8 flex justify-center">
-                    <SuggestedQueries mode={mode} onSelect={(q) => handleSubmit(q)} />
-                  </div>
+                  {!selectedAgent && (
+                    <div className="mt-8 flex justify-center">
+                      <SuggestedQueries mode={mode} onSelect={(q) => handleSubmit(q)} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -318,7 +348,7 @@ export default function Index() {
 
           {hasContent && (
             <>
-              <div className="flex-1 pt-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex-1 pt-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto">
                 <div className="w-full max-w-5xl mx-auto">
 
                   {mode === 'file_search' && !uploadedFile && !isLoading && messages.length === 0 && (
@@ -335,10 +365,14 @@ export default function Index() {
                   {(mode === 'chat' || mode === 'file_search') && (
                     <div className="max-w-3xl mx-auto space-y-8 pb-40">
                       {messages.map((message) => (
-                        message.role === 'assistant' && mode === 'file_search' ? (
+                        message.role === 'assistant' && (mode === 'file_search' || selectedAgent) ? (
                           <div key={message.id} className="flex gap-4 group">
-                            <div className="w-10 h-10 rounded-2xl bg-foreground flex items-center justify-center flex-shrink-0">
-                              <Flame className="w-6 h-6 text-background" />
+                            <div className="w-10 h-10 rounded-2xl bg-foreground flex items-center justify-center flex-shrink-0 animate-in zoom-in-50 duration-300">
+                              {message.avatar_url ? (
+                                <img src={message.avatar_url} className="w-full h-full object-cover rounded-2xl" />
+                              ) : (
+                                <Flame className="w-6 h-6 text-background" />
+                              )}
                             </div>
                             <FileSearchMessage
                               content={message.content}
@@ -400,7 +434,9 @@ export default function Index() {
                   <OmniInput
                     mode={mode}
                     chatMode={chatMode}
-                    onOpenSelector={() => setIsSelectorOpen(true)}
+                    selectedAgent={selectedAgent}
+                    onOpenModeSelector={() => setIsSelectorOpen(true)}
+                    onOpenAgentSelector={() => setIsAgentSelectorOpen(true)}
                     onSubmit={handleSubmit}
                     isLoading={isLoading}
                     onStop={handleStop}
@@ -412,6 +448,20 @@ export default function Index() {
           )}
         </main>
       </div>
+
+      <ModeSelector
+        open={isSelectorOpen}
+        onOpenChange={setIsSelectorOpen}
+        onSelect={handleModeSelect}
+      />
+
+      <AgentSelector
+        open={isAgentSelectorOpen}
+        onOpenChange={setIsAgentSelectorOpen}
+        selectedAgentId={selectedAgent?.id || null}
+        onSelect={setSelectedAgent}
+      />
     </div>
   );
 }
+

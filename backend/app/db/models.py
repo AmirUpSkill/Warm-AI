@@ -6,7 +6,8 @@ from app.schemas.common import ChatMode
 class Session(SQLModel , table=True):
     id : Optional[int] = Field(default=None , primary_key=True)
     title: str 
-    mode: ChatMode 
+    mode: ChatMode
+    agent_id: Optional[int] = Field(default=None , foreign_key="agent.id")
     # --- For File Search --- 
     file_search_store_name: Optional[str] = None 
     file_name: Optional[str] = None 

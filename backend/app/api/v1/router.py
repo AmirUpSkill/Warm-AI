@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import chat, search, history, file_search
+from app.api.v1.endpoints import chat, search, history, file_search, agents
 
 router = APIRouter(prefix="/api/v1")
 
@@ -8,3 +8,4 @@ router.include_router(chat.router)
 router.include_router(search.router)
 router.include_router(history.router)
 router.include_router(file_search.router)
+router.include_router(agents.router)
